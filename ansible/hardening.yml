@@ -1,0 +1,128 @@
+---
+# =============================================================
+# TFM — Playbook de Bastionado CIS Benchmark
+# Objetivo: Bastionar el Honeypot según CIS Ubuntu 22.04
+# Máquina destino: TFM-Honeypot (10.0.2.3)
+# =============================================================
+
+- name: "TFM - Bastionado CIS Benchmark Honeypot"
+  hosts: honeypot
+  become: yes
+
+  tasks:
+
+    # ── SSH Hardening ─────────────────────────────────────────
+    - name: "CIS 5.2.8 - Deshabilitar login root por SSH"
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+      notify: Restart SSH
+
+    - name: "CIS 5.2.11 - Habilitar autenticación por contraseña (para lab)"
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication yes'
+        state: present
+      notify: Restart SSH
+
+    - name: "CIS 5.2.7 - Limitar intentos de autenticación SSH"
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?MaxAuthTries'
+        line: 'MaxAuthTries 4'
+        state: present
+      notify: Restart SSH
+
+    - name: "CIS 5.2.15 - Deshabilitar forwarding TCP"
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?AllowTcpForwarding'
+        line: 'AllowTcpForwarding no'
+        state: present
+      notify: Restart SSH
+
+    - name: "CIS 5.2.16 - Deshabilitar X11 Forwarding"
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?X11Forwarding'
+        line: 'X11Forwarding no'
+        state: present
+      notify: Restart SSH
+
+    # ── Firewall nftables ─────────────────────────────────────
+    - name: "CIS 3.5 - Instalar nftables"
+      apt:
+        name: nftables
+        state: present
+        update_cache: yes
+
+    - name: "nftables - Aplicar política Default Deny"
+      copy:
+        dest: /etc/nftables.conf
+        content: |
+          #!/usr/sbin/nft -f
+          flush ruleset
+
+          table inet filter {
+            chain input {
+              type filter hook input priority 0; policy drop;
+
+              # Permitir loopback
+              iif "lo" accept
+
+              # Permitir conexiones establecidas y relacionadas
+              ct state established,related accept
+
+              # Permitir SSH desde cualquier origen (honeypot = cebo)
+              tcp dport 22 accept
+
+              # Permitir comunicación con Wazuh Manager
+              ip saddr 10.0.2.5 tcp dport 1514 accept
+              ip saddr 10.0.2.5 udp dport 1514 accept
+
+              # Log y DROP del resto
+              log prefix "[nftables DROP] " drop
+            }
+
+            chain forward {
+              type filter hook forward priority 0; policy drop;
+            }
+
+            chain output {
+              type filter hook output priority 0; policy accept;
+            }
+          }
+        mode: '0644'
+      notify: Apply nftables
+
+    - name: "Habilitar nftables al inicio del sistema"
+      systemd:
+        name: nftables
+        enabled: yes
+        state: started
+
+    # ── Actualizaciones de seguridad ──────────────────────────
+    - name: "CIS 1.9 - Instalar actualizaciones de seguridad"
+      apt:
+        upgrade: safe
+        update_cache: yes
+
+    - name: "Instalar paquetes de seguridad base"
+      apt:
+        name:
+          - fail2ban
+          - auditd
+          - apt-listchanges
+        state: present
+
+  handlers:
+    - name: Restart SSH
+      systemd:
+        name: ssh
+        state: restarted
+
+    - name: Apply nftables
+      command: nft -f /etc/nftables.conf

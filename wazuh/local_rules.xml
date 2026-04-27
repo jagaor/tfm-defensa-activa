@@ -1,0 +1,27 @@
+<!-- =============================================================
+     TFM — Reglas personalizadas Wazuh
+     Archivo: /var/ossec/etc/rules/local_rules.xml
+     ============================================================= -->
+
+<group name="tfm,sshd,brute_force,">
+
+  <!-- Regla personalizada: alerta de alta visibilidad para el TFM -->
+  <!-- Se dispara cuando la regla 2502 (brute force) se activa     -->
+  <rule id="100001" level="12">
+    <if_sid>2502</if_sid>
+    <description>TFM: Ataque de fuerza bruta SSH detectado desde $(srcip). MITRE T1110.001</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,pci_dss_10.2.4,pci_dss_10.2.5,</group>
+  </rule>
+
+  <!-- Regla personalizada: confirmar bloqueo por Active Response -->
+  <rule id="100002" level="10">
+    <if_sid>601</if_sid>
+    <match>firewall-drop</match>
+    <description>TFM: Active Response ejecutado - IP bloqueada por firewall-drop</description>
+    <group>active_response,</group>
+  </rule>
+
+</group>

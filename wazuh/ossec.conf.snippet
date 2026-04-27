@@ -1,0 +1,24 @@
+<!-- =============================================================
+     TFM — Configuración Active Response Wazuh
+     Añadir este bloque en /var/ossec/etc/ossec.conf
+     ANTES del cierre </ossec_config>
+     ============================================================= -->
+
+  <!-- Definición del comando firewall-drop -->
+  <command>
+    <name>firewall-drop</name>
+    <executable>firewall-drop</executable>
+    <timeout_allowed>yes</timeout_allowed>
+  </command>
+
+  <!-- Active Response: bloqueo automático por fuerza bruta SSH -->
+  <!-- Regla 2502: "User missed the password more than one time" -->
+  <!-- Regla 5758: "Maximum authentication attempts exceeded"   -->
+  <!-- Mapeo MITRE ATT&CK: T1110.001 - Password Guessing        -->
+  <active-response>
+    <command>firewall-drop</command>
+    <location>defined-agent</location>
+    <agent_id>001</agent_id>
+    <rules_id>5758,2502</rules_id>
+    <timeout>600</timeout>
+  </active-response>

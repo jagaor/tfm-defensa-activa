@@ -1,0 +1,62 @@
+---
+# =============================================================
+# TFM — Playbook de instalación del Agente Wazuh
+# Objetivo: Instalar y configurar Wazuh Agent 4.7.5 en el Honeypot
+# Versión del agente debe coincidir con el Manager (4.7.5)
+# =============================================================
+
+- name: "TFM - Instalar Wazuh Agent en Honeypot"
+  hosts: honeypot
+  become: yes
+  vars:
+    wazuh_manager_ip: "10.0.2.5"
+    wazuh_agent_name: "honeypot"
+    wazuh_version: "4.7.5-1"
+
+  tasks:
+
+    - name: "Añadir clave GPG del repositorio Wazuh"
+      apt_key:
+        url: https://packages.wazuh.com/key/GPG-KEY-WAZUH
+        state: present
+
+    - name: "Añadir repositorio oficial Wazuh 4.x"
+      apt_repository:
+        repo: "deb https://packages.wazuh.com/4.x/apt/ stable main"
+        state: present
+        filename: wazuh
+
+    - name: "Actualizar caché de paquetes"
+      apt:
+        update_cache: yes
+
+    - name: "Instalar wazuh-agent versión {{ wazuh_version }}"
+      apt:
+        name: "wazuh-agent={{ wazuh_version }}"
+        state: present
+
+    - name: "Configurar IP del Manager en ossec.conf"
+      lineinfile:
+        path: /var/ossec/etc/ossec.conf
+        regexp: '<address>MANAGER_IP</address>'
+        line: "    <address>{{ wazuh_manager_ip }}</address>"
+
+    - name: "Habilitar e iniciar el servicio wazuh-agent"
+      systemd:
+        name: wazuh-agent
+        enabled: yes
+        daemon_reload: yes
+        state: restarted
+
+    - name: "Esperar 5 segundos para que el agente arranque"
+      pause:
+        seconds: 5
+
+    - name: "Verificar que el agente está corriendo"
+      systemd:
+        name: wazuh-agent
+      register: agent_status
+
+    - name: "Mostrar estado del agente"
+      debug:
+        msg: "Wazuh Agent estado: {{ agent_status.status.ActiveState }}"
